@@ -1,0 +1,28 @@
+{
+  "type": "module",
+  "name": "zkwasm-ts-server",
+  "dependencies": {
+    "@types/bn.js": "^5.1.5",
+    "@types/node": "^20.14.2",
+    "@types/sha256": "^0.2.2",
+    "cors": "^2.8.5",
+    "zkwasm-minirollup-rpc": "github:DelphinusLab/zkWasm-minirollup-rpc",
+    "delphinus-curves": "git+https://github.com/DelphinusLab/delphinus-curves.git",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.1",
+    "mongoose": "^8.4.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5",
+    "zkwasm-service-cli": "git+https://github.com/DelphinusLab/zkWasm-service-cli.git",
+    "zkwasm-service-helper": "github:DelphinusLab/zkWasm-service-helper"
+  },
+  "main": "src/index.js",
+  "scripts": {
+    "server": "node src/service.js",
+    "settle": "node src/settle.js",
+    "clean": "rimraf src/**/*.js src/**/*.js.map src/*.js src/*.js.map",
+    "build": "npx tsc",
+    "test": "jest",
+    "postinstall": "npm run build"
+  }
+}
