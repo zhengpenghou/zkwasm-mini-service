@@ -2,4 +2,4 @@
 **/*.js.map
 **/node_modules
 target
-dist
+dist/
