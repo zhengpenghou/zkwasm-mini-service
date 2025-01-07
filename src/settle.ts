@@ -1,11 +1,11 @@
 import BN from "bn.js";
 import { ethers } from "ethers";
-import { ServiceHelper, get_mongoose_db, get_contract_addr, get_image_md5, modelBundle, get_settle_private_account, get_chain_id } from "./config.js";
-import abiData from './Proxy.json' assert { type: 'json' };
+import { ServiceHelper, get_mongoose_db, get_contract_addr, get_image_md5, modelBundle, get_settle_private_account, get_chain_id } from "./utils/config.js";
+import abiData from './utils/Proxy.json' assert { type: 'json' };
 import mongoose from 'mongoose';
 import { ZkWasmUtil, PaginationResult, QueryParams, Task, VerifyProofParams, AutoSubmitStatus, Round1Status, Round1Info } from "zkwasm-service-helper";
-import { U8ArrayUtil } from './lib.js';
-import { decodeWithdraw} from "./convention.js";
+import { U8ArrayUtil } from './utils/lib.js';
+import { decodeWithdraw} from "./utils/convention.js";
 import dotenv from 'dotenv';
 
 dotenv.config();

@@ -1,7 +1,7 @@
 import { ZKWasmAppRpc, PlayerConvention } from "zkwasm-minirollup-rpc";
 import { ethers, EventLog } from "ethers";
 import { BigNumber } from '@ethersproject/bignumber';  // Import BigNumber from @ethersproject/bignumber
-import abiData from './Proxy.json' assert { type: 'json' };
+import abiData from './utils/Proxy.json' assert { type: 'json' };
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 
