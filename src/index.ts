@@ -1,7 +1,3 @@
-import { ZKWasmAppRpc, PlayerConvention } from "zkwasm-minirollup-rpc";
-import { ethers } from "ethers";
-import mongoose from 'mongoose';
-
 /**
  * Configuration interface for both Deposit and Settlement services
  */
