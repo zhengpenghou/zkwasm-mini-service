@@ -17,7 +17,11 @@ export const get_server_admin_key = () => {
 }
 
 export const get_chain_id = () => {
-  return 16;
+  if (process.env.CHAIN_ID) {
+    return process.env.CHAIN_ID;
+  } else {
+    return 16;
+  }
 }
 
 export const get_server_admin_pubkey = () => {

@@ -34,7 +34,7 @@ export class Settlement {
     this.signer = new ethers.Wallet(config.settlerPrivateKey, this.provider);
     this.constants = {
       proxyAddress: config.settlementContractAddress,
-      chainId: get_chain_id(),
+      chainId: Number(get_chain_id()),
     };
   }
 

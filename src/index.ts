@@ -14,6 +14,8 @@ export interface Config {
   zkwasmRpcUrl?: string;
   /** Private key for the settler (only required for Settlement service) */
   settlerPrivateKey?: string;
+  /** Chain ID */
+  chainId?: number;
 }
 
 /**
@@ -35,6 +37,7 @@ const config: Config = {
   mongoUri: "mongodb://...",
   zkwasmRpcUrl: "https://your-zkwasm-rpc", // optional
   settlerPrivateKey: "your-settler-private-key", // required for Settlement service
+  chainId: 16,
 };
 
 // Start deposit service
