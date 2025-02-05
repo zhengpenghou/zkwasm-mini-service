@@ -23,6 +23,10 @@
     "clean": "rimraf src/**/*.js src/**/*.js.map src/*.js src/*.js.map",
     "build": "npx tsc",
     "test": "jest",
-    "postinstall": "npm run build"
+    "postinstall": "npm run build",
+    "deposit": "node dist/deposit_service.js",
+    "settle": "node dist/settle_service.js"
   }
 }
+
+

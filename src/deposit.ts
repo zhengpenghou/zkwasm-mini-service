@@ -1,6 +1,5 @@
 import { ZKWasmAppRpc, PlayerConvention } from "zkwasm-minirollup-rpc";
 import { ethers, EventLog } from "ethers";
-import { BigNumber } from '@ethersproject/bignumber';
 import abiData from './utils/Proxy.json' assert { type: 'json' };
 import mongoose from 'mongoose';
 
@@ -21,7 +20,7 @@ const TxHash = mongoose.model('TxHash', txSchema);
 export class Deposit {
   private rpc: ZKWasmAppRpc;
   private admin: PlayerConvention;
-  private provider: ethers.JsonRpcProvider;
+  private provider: ethers.WebSocketProvider;
   private proxyContract: ethers.Contract;
   private config: {
     rpcProvider: string;
@@ -39,8 +38,11 @@ export class Deposit {
     zkwasmRpcUrl?: string;
   }) {
     this.config = config;
-    this.rpc = new ZKWasmAppRpc(config.zkwasmRpcUrl || "https://disco.0xrobot.cx:8085");
-    this.provider = new ethers.JsonRpcProvider(config.rpcProvider);
+    this.rpc = new ZKWasmAppRpc(config.zkwasmRpcUrl || "http://localhost:3000");
+    
+    // 将 HTTP URL 转换为 WebSocket URL
+    const wsUrl = config.rpcProvider.replace('http', 'ws');
+    this.provider = new ethers.WebSocketProvider(wsUrl);
     
     const DEPOSIT = 9n;
     const WITHDRAW = 8n;
@@ -48,23 +50,27 @@ export class Deposit {
     this.proxyContract = new ethers.Contract(config.settlementContractAddress, abiData.abi, this.provider);
   }
 
-  private createCommand(nonce: bigint, command: bigint, feature: bigint) {
-    return (nonce << 16n) + (feature << 8n) + command;
+  private createCommand(nonce: bigint, command: bigint, params: Array<bigint>): BigUint64Array {
+    const cmd = (nonce << 16n) + (BigInt(params.length + 1) << 8n) + command;
+    let buf = [cmd];
+    buf = buf.concat(params);
+    const barray = new BigUint64Array(buf);
+    return barray;
   }
 
   private async createPlayer(player: PlayerConvention) {
     try {
       const CREATE_PLAYER = 1n;
-      const state = await this.rpc.sendTransaction(
-        new BigUint64Array([this.createCommand(0n, CREATE_PLAYER, 0n), 0n, 0n, 0n]),
+      let result = await this.rpc.sendTransaction(
+        this.createCommand(0n, CREATE_PLAYER, []),
         player.processingKey
       );
-      return state;
+      return result;
     } catch(e) {
       if(e instanceof Error) {
         console.log(e.message);
       }
-      console.log("create Player error");
+      console.log("createPlayer error at processing key:", player.processingKey);
     }
   }
 
@@ -171,24 +177,34 @@ export class Deposit {
     console.log("Installing admin...");
     await this.createPlayer(this.admin);
 
-    // Get all past TopUp events
-    try {
-      const filter = this.proxyContract.filters.TopUp();
-      const events = await this.proxyContract.queryFilter(filter, 0, 'latest');
-      console.log(`Found ${events.length} TopUp events.`);
+    const setupEventListener = async () => {
+      try {
+        const contractAddress = await this.proxyContract.getAddress();
+        const topicFilter = {
+          address: contractAddress,
+          topics: [this.proxyContract.interface.getEvent('TopUp')?.topicHash ?? ethers.id('TopUp(address,address,uint256,uint256,uint256)')]
+        };
+        
+        this.provider.on('block', async (blockNumber) => {
+          try {
+            const events = await this.proxyContract.queryFilter(this.proxyContract.filters.TopUp(), blockNumber, blockNumber);
+            for (const event of events) {
+              console.log(`New TopUp event detected in block ${blockNumber}: ${event.transactionHash}`);
+              await this.processTopUpEvent(event as EventLog);
+            }
+          } catch (error) {
+            console.error(`Error processing block ${blockNumber}:`, error);
+          }
+        });
 
-      for (const event of events) {
-        const eventLog = event as EventLog;
-        await this.processTopUpEvent(eventLog);
+        console.log('Block listener setup successfully');
+      } catch (error) {
+        console.error('Error setting up block listener:', error);
+        setTimeout(setupEventListener, 5000);
       }
-    } catch (error) {
-      console.error('Error retrieving TopUp events:', error);
-    }
+    };
 
-    // Listen for new TopUp events
-    this.proxyContract.on('TopUp', async (l1token: string, address: string, pid_1: BigNumber, pid_2: BigNumber, amount: BigNumber, event: any) => {
-      console.log(`New TopUp event detected: ${event.log.transactionHash}`);
-      await this.processTopUpEvent(event.log);
-    });
+    // Initial setup
+    await setupEventListener();
   }
 }

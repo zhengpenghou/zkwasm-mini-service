@@ -1,9 +1,9 @@
 import BN from "bn.js";
 import { ethers } from "ethers";
-import { ServiceHelper, get_mongoose_db, get_contract_addr, get_image_md5, modelBundle, get_settle_private_account, get_chain_id } from "./utils/config.js";
+import { ServiceHelper, get_image_md5, modelBundle, get_chain_id } from "./utils/config.js";
 import abiData from './utils/Proxy.json' assert { type: 'json' };
 import mongoose from 'mongoose';
-import { ZkWasmUtil, PaginationResult, QueryParams, Task, VerifyProofParams, AutoSubmitStatus, Round1Status, Round1Info } from "zkwasm-service-helper";
+import { PaginationResult, QueryParams, Task, AutoSubmitStatus, Round1Status, Round1Info } from "zkwasm-service-helper";
 import { U8ArrayUtil } from './utils/lib.js';
 import { decodeWithdraw} from "./utils/convention.js";
 
@@ -136,10 +136,10 @@ export class Settlement {
   private async prepareVerifyAttributesSingle(task: Task): Promise<ProofArgs> {
     let shadowInstances = task.shadow_instances;
     let batchInstances = task.batch_instances;
-
+  
     let proofArr = new U8ArrayUtil(task.proof).toNumber();
     let auxArr = new U8ArrayUtil(task.aux).toNumber();
-    let verifyInstancesArr = shadowInstances.length === 0
+    let verifyInstancesArr =  shadowInstances.length === 0
       ? new U8ArrayUtil(batchInstances).toNumber()
       : new U8ArrayUtil(shadowInstances).toNumber();
     let instArr = new U8ArrayUtil(task.instances).toNumber();
@@ -160,32 +160,36 @@ export class Settlement {
     let txData = new Uint8Array(task.input_context);
     const round_1_info_response = await ServiceHelper.queryRound1Info({
       task_id: task._id.$oid,
-      chain_id: this.constants.chainId,
+      chain_id: Number(this.constants.chainId),
       status: Round1Status.Batched,
       total: 1,
-    });
-
+    }); 
+  
     let shadowInstances = task.shadow_instances;
     let batchInstances = task.batch_instances;
 
+  
     const round_1_output: Round1Info = round_1_info_response.data[0];
-
-    let verifyInstancesArr = shadowInstances.length === 0
+  
+    let verifyInstancesArr =  shadowInstances.length === 0
       ? new U8ArrayUtil(batchInstances).toNumber()
       : new U8ArrayUtil(shadowInstances).toNumber();
-
+  
     const siblingInstances = new U8ArrayUtil(new Uint8Array(round_1_output.target_instances[0])).toNumber();
     const r1ShadowInstance = new U8ArrayUtil(new Uint8Array(round_1_output.shadow_instances!)).toNumber()[0];
-
+  
     let instArr = new U8ArrayUtil(task.instances).toNumber();
-
+  
+    // Find the index of this proof in the round 1 output by comparing task_ids
+    // This will be used to verify that this proof was included in a particular batch.
+    // If it does not exist, the verification will fail
     const index = round_1_output.task_ids.findIndex(
       (id:any) => id === task._id["$oid"]
     );
-
+  
     let proofArr = siblingInstances;
     proofArr.push(r1ShadowInstance);
-
+  
     return {
       txData: txData,
       proofArr: proofArr,
@@ -224,7 +228,17 @@ export class Settlement {
           }
         }
 
+        console.log('============')
+        console.log('here are the task',task)
+        console.log('============')
+
         let attributes = await this.prepareVerifyAttributes(task!);
+
+
+        console.log('============')
+        console.log('here are the attributes',attributes)
+        console.log('============')
+
 
         const tx = await proxy.verify(
           attributes.txData,
@@ -279,7 +293,8 @@ export class Settlement {
   async serve() {
     // Connect to MongoDB
     await mongoose.connect(this.config.mongoUri);
-    console.log('Settlement service started - MongoDB connected');
+    console.log('Settlement service started - MongoDB connected at ', this.config.mongoUri);
+
 
     // Start monitoring and settlement
     while (true) {
