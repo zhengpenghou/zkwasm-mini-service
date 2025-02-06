@@ -20,7 +20,7 @@ const TxHash = mongoose.model('TxHash', txSchema);
 export class Deposit {
   private rpc: ZKWasmAppRpc;
   private admin: PlayerConvention;
-  private provider: ethers.WebSocketProvider;
+  private provider: ethers.JsonRpcProvider;
   private proxyContract: ethers.Contract;
   private config: {
     rpcProvider: string;
@@ -28,6 +28,8 @@ export class Deposit {
     settlementContractAddress: string;
     mongoUri: string;
     zkwasmRpcUrl?: string;
+    withdrawOpcode: string;
+    depositOpcode: string;
   };
 
   constructor(config: {
@@ -36,18 +38,24 @@ export class Deposit {
     settlementContractAddress: string;
     mongoUri: string;
     zkwasmRpcUrl?: string;
+    withdrawOpcode: string;
+    depositOpcode: string;
   }) {
     this.config = config;
     this.rpc = new ZKWasmAppRpc(config.zkwasmRpcUrl || "http://localhost:3000");
     
-    // 将 HTTP URL 转换为 WebSocket URL
-    const wsUrl = config.rpcProvider.replace('http', 'ws');
-    this.provider = new ethers.WebSocketProvider(wsUrl);
+    this.provider = new ethers.JsonRpcProvider(config.rpcProvider);
     
-    const DEPOSIT = 9n;
-    const WITHDRAW = 8n;
+    // 将字符串转换为 BigInt
+    const WITHDRAW = BigInt(config.withdrawOpcode);
+    const DEPOSIT = BigInt(config.depositOpcode);
+    
     this.admin = new PlayerConvention(config.serverAdminKey, this.rpc, DEPOSIT, WITHDRAW);
     this.proxyContract = new ethers.Contract(config.settlementContractAddress, abiData.abi, this.provider);
+
+    console.log('HTTP provider initialized');
+
+    console.log("player processing key:", this.admin.processingKey);
   }
 
   private createCommand(nonce: bigint, command: bigint, params: Array<bigint>): BigUint64Array {
@@ -70,7 +78,7 @@ export class Deposit {
       if(e instanceof Error) {
         console.log(e.message);
       }
-      console.log("createPlayer error at processing key:", player.processingKey);
+      console.log("create Player error");
     }
   }
 
@@ -89,8 +97,17 @@ export class Deposit {
 
   private async processTopUpEvent(event: EventLog) {
     try {
-      const eventLog = event as EventLog;
-      const [l1token, address, pid_1, pid_2, amount] = eventLog.args;
+      const decodedEvent = this.proxyContract.interface.parseLog({
+        topics: event.topics,
+        data: event.data
+      });
+      
+      if (!decodedEvent) {
+        console.error('Failed to decode event');
+        return;
+      }
+
+      const [l1token, address, pid_1, pid_2, amount] = decodedEvent.args;
 
       console.log(`TopUp event received: pid_1=${pid_1.toString()}, pid_2=${pid_2.toString()}, amount=${amount.toString()} wei`);
 
@@ -127,7 +144,7 @@ export class Deposit {
         console.log(`TxHash ${event.transactionHash} already exists in the DB with state: ${tx.state}`);
       }
 
-      if (tx && tx.state === 'pending') {
+      if (tx && (tx.state === 'pending' || tx.state === 'failed')) {
         try {
           await this.updateTxState(event.transactionHash, 'in-progress');
           console.log('Transaction state updated to "in-progress".');
@@ -137,7 +154,11 @@ export class Deposit {
           if (amountInEther < 1n) {
             console.error(`--------------Skip: Amount must be at least 1 Titan (in ether instead of wei) ${event.transactionHash}\n`);
           } else {
-            await this.admin.deposit(pid_1, pid_2, tokenindex, amountInEther);
+            const depositResult = await this.admin.deposit(pid_1, pid_2, tokenindex, amountInEther);
+            if (!depositResult) {
+              throw new Error(`Deposit failed for transaction ${event.transactionHash}`);
+            }
+            console.log("deposit params, pid_1:", pid_1, "pid_2:", pid_2, "tokenIndex:", tokenindex, "amount:", amountInEther);
             console.log(`------------------Deposit successful! ${event.transactionHash}\n`);
           }
 
@@ -145,6 +166,7 @@ export class Deposit {
         } catch (error) {
           console.error('Error during deposit:', error);
           await this.updateTxState(event.transactionHash, 'failed');
+          throw error; // 重新抛出错误以确保错误被正确处理
         }
       } else if (tx.state === 'in-progress'){
         while(1) {
@@ -161,6 +183,65 @@ export class Deposit {
       }
     } catch (error) {
       console.error('Error processing TopUp event:', error);
+      throw error; // 重新抛出错误以确保错误被正确处理
+    }
+  }
+
+  private async getHistoricalTopUpEvents() {
+    try {
+      console.log("get block number...");
+      const latestBlock = await this.provider.getBlockNumber();
+      const batchSize = 50000;
+      const totalBlocksToScan = 200000;
+      const startBlock = Math.max(0, latestBlock - totalBlocksToScan);
+      
+      console.log(`Starting historical scan - Latest block: ${latestBlock}`);
+      console.log(`Scanning from block ${startBlock} to ${latestBlock}`);
+      
+      // 获取事件签名
+      const topUpEvent = abiData.abi.find(
+        (item: any) => item.type === 'event' && item.name === 'TopUp'
+      );
+      if (!topUpEvent) {
+        throw new Error('TopUp event not found in ABI');
+      }
+      const eventSignature = `${topUpEvent.name}(${topUpEvent.inputs.map((input: any) => input.type).join(',')})`;
+      const eventHash = ethers.id(eventSignature);
+      console.log('Using event hash:', eventHash);
+
+      // 分批处理区块
+      for (let fromBlock = startBlock; fromBlock < latestBlock; fromBlock += batchSize) {
+        const toBlock = Math.min(fromBlock + batchSize - 1, latestBlock);
+        console.log(`Querying events from block ${fromBlock} to ${toBlock}`);
+        
+        try {
+          const logs = await this.provider.getLogs({
+            address: this.config.settlementContractAddress,
+            topics: [eventHash],
+            fromBlock,
+            toBlock
+          });
+
+          console.log(`Found ${logs.length} historical TopUp events in this batch.`);
+          
+          for (const log of logs) {
+            console.log(`Processing historical event from tx: ${log.transactionHash}`);
+            const tx = await this.findTxByHash(log.transactionHash);
+            if (!tx || ['pending', 'failed'].includes(tx.state)) {
+              await this.processTopUpEvent(log as EventLog);
+            }
+          }
+        } catch (error) {
+          console.error(`Error processing batch ${fromBlock}-${toBlock}:`, error);
+          continue; // 继续处理下一批次
+        }
+      }
+      
+      console.log('Historical TopUp events processing completed.');
+    } catch (error) {
+      console.error('Error retrieving historical TopUp events:', error);
+    } finally {
+      console.log('Historical event processing finished, setting up real-time listeners...');
     }
   }
 
@@ -177,34 +258,58 @@ export class Deposit {
     console.log("Installing admin...");
     await this.createPlayer(this.admin);
 
-    const setupEventListener = async () => {
-      try {
-        const contractAddress = await this.proxyContract.getAddress();
-        const topicFilter = {
-          address: contractAddress,
-          topics: [this.proxyContract.interface.getEvent('TopUp')?.topicHash ?? ethers.id('TopUp(address,address,uint256,uint256,uint256)')]
-        };
-        
-        this.provider.on('block', async (blockNumber) => {
-          try {
-            const events = await this.proxyContract.queryFilter(this.proxyContract.filters.TopUp(), blockNumber, blockNumber);
-            for (const event of events) {
-              console.log(`New TopUp event detected in block ${blockNumber}: ${event.transactionHash}`);
-              await this.processTopUpEvent(event as EventLog);
+    // Process historical events first
+    console.log("Processing historical TopUp events...");
+    await this.getHistoricalTopUpEvents();
+
+    console.log("Setting up polling for new events...");
+    let lastProcessedBlock = await this.provider.getBlockNumber();
+    
+    // 每10秒轮询一次新区块
+    setInterval(async () => {
+      let retries = 3;
+      while (retries > 0) {
+        try {
+          const currentBlock = await this.provider.getBlockNumber();
+          if (currentBlock > lastProcessedBlock) {
+            console.log(`Checking new blocks from ${lastProcessedBlock + 1} to ${currentBlock}`);
+            
+            const topUpEvent = abiData.abi.find(
+              (item: any) => item.type === 'event' && item.name === 'TopUp'
+            );
+            if (!topUpEvent) {
+              throw new Error('TopUp event not found in ABI');
             }
-          } catch (error) {
-            console.error(`Error processing block ${blockNumber}:`, error);
+            const eventHash = ethers.id(`${topUpEvent.name}(${topUpEvent.inputs.map((input: any) => input.type).join(',')})`);
+            
+            const logs = await this.provider.getLogs({
+              address: this.config.settlementContractAddress,
+              topics: [eventHash],
+              fromBlock: lastProcessedBlock + 1,
+              toBlock: currentBlock
+            });
+
+            for (const log of logs) {
+              console.log('New TopUp event detected:', log);
+              await this.processTopUpEvent(log as EventLog);
+            }
+
+            lastProcessedBlock = currentBlock;
           }
-        });
-
-        console.log('Block listener setup successfully');
-      } catch (error) {
-        console.error('Error setting up block listener:', error);
-        setTimeout(setupEventListener, 5000);
+          break; // 成功后跳出重试循环
+        } catch (error) {
+          retries--;
+          if (retries === 0) {
+            console.error('Error polling for new events after all retries:', error);
+          } else {
+            console.log(`Retry attempt remaining: ${retries}`);
+            await new Promise(resolve => setTimeout(resolve, 2000)); // 等待2秒后重试
+          }
+        }
       }
-    };
+    }, 30000); // 30秒轮询一次
 
-    // Initial setup
-    await setupEventListener();
+
+    console.log('Event polling setup successfully');
   }
 }

@@ -16,7 +16,12 @@ export interface Config {
   settlerPrivateKey?: string;
   /** Chain ID */
   chainId?: number;
+  /** Withdraw opcode */
+  withdrawOpcode: string;
+  /** Deposit opcode */
+  depositOpcode: string;
 }
+
 
 /**
  * Deposit service class that handles L1 to L2 token deposits
@@ -49,7 +54,10 @@ const getConfig = (configOverride?: Partial<Config>): Config => {
     zkwasmRpcUrl: "http://localhost:3000",
     settlerPrivateKey: get_settle_private_account(),
     chainId: Number(get_chain_id()),
+    withdrawOpcode: "6",
+    depositOpcode: "7",
   };  
+
 
 
   // Merge with override config if provided

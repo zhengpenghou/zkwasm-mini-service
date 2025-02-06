@@ -47,32 +47,58 @@ export class Settlement {
     return result;
   }
 
+  private async withRetry<T>(
+    operation: () => Promise<T>,
+    retries: number = 3,
+    delay: number = 2000
+  ): Promise<T> {
+    for (let i = 0; i < retries; i++) {
+      try {
+        return await operation();
+      } catch (error: any) {
+        if (i === retries - 1) throw error; // 如果是最后一次重试，则抛出错误
+        
+        console.log(`Operation failed, attempt ${i + 1}/${retries}. Retrying in ${delay/1000}s...`);
+        console.log(`Error: ${error.message}`);
+        
+        await new Promise(resolve => setTimeout(resolve, delay));
+        // 每次重试增加延迟时间
+        delay *= 1.5;
+      }
+    }
+    throw new Error('Unreachable code');
+  }
+
   private async getMerkleArray(): Promise<BigUint64Array> {
-    const proxy = new ethers.Contract(this.constants.proxyAddress, abiData.abi, this.provider);
-    let proxyInfo = await proxy.getProxyInfo();
-    console.log("Proxy Info:", proxyInfo);
-    const oldRoot = proxyInfo.merkle_root;
-    console.log("Type of oldRoot:", typeof oldRoot);
-    console.log("Old Merkle Root:", oldRoot);
-    console.log("Settle:Old Merkle Root in u64:", this.convertToBigUint64Array(oldRoot));
-    return this.convertToBigUint64Array(oldRoot);
+    return this.withRetry(async () => {
+      const proxy = new ethers.Contract(this.constants.proxyAddress, abiData.abi, this.provider);
+      let proxyInfo = await proxy.getProxyInfo();
+      console.log("Proxy Info:", proxyInfo);
+      const oldRoot = proxyInfo.merkle_root;
+      console.log("Type of oldRoot:", typeof oldRoot);
+      console.log("Old Merkle Root:", oldRoot);
+      console.log("Settle:Old Merkle Root in u64:", this.convertToBigUint64Array(oldRoot));
+      return this.convertToBigUint64Array(oldRoot);
+    });
   }
 
   private async getMerkle(): Promise<String> {
-    const proxy = new ethers.Contract(this.constants.proxyAddress, abiData.abi, this.provider);
-    let proxyInfo = await proxy.getProxyInfo();
-    console.log("Proxy Info:", proxyInfo);
-    const oldRoot = proxyInfo.merkle_root;
-    console.log("Type of oldRoot:", typeof oldRoot);
-    console.log("Old Merkle Root:", oldRoot);
-    console.log("Settle:Old Merkle Root in u64:", this.convertToBigUint64Array(oldRoot));
+    return this.withRetry(async () => {
+      const proxy = new ethers.Contract(this.constants.proxyAddress, abiData.abi, this.provider);
+      let proxyInfo = await proxy.getProxyInfo();
+      console.log("Proxy Info:", proxyInfo);
+      const oldRoot = proxyInfo.merkle_root;
+      console.log("Type of oldRoot:", typeof oldRoot);
+      console.log("Old Merkle Root:", oldRoot);
+      console.log("Settle:Old Merkle Root in u64:", this.convertToBigUint64Array(oldRoot));
 
-    let bnStr = oldRoot.toString(10);
-    let bn = new BN(bnStr, 10);
-    let oldRootBeString = '0x' + bn.toString("hex", 64);
+      let bnStr = oldRoot.toString(10);
+      let bn = new BN(bnStr, 10);
+      let oldRootBeString = '0x' + bn.toString("hex", 64);
 
-    console.log("Old Merkle Root(string):", oldRootBeString);
-    return oldRootBeString;
+      console.log("Old Merkle Root(string):", oldRootBeString);
+      return oldRootBeString;
+    });
   }
 
   private async getTask(taskid: string, d_state: string|null): Promise<Task> {
@@ -167,28 +193,27 @@ export class Settlement {
   
     let shadowInstances = task.shadow_instances;
     let batchInstances = task.batch_instances;
-
   
     const round_1_output: Round1Info = round_1_info_response.data[0];
   
-    let verifyInstancesArr =  shadowInstances.length === 0
+    let verifyInstancesArr = shadowInstances.length === 0
       ? new U8ArrayUtil(batchInstances).toNumber()
       : new U8ArrayUtil(shadowInstances).toNumber();
   
-    const siblingInstances = new U8ArrayUtil(new Uint8Array(round_1_output.target_instances[0])).toNumber();
+    let proofArr: string[] = [];
+    for (const targetInstance of round_1_output.target_instances) {
+      const siblingInstance = new U8ArrayUtil(new Uint8Array(targetInstance)).toNumber();
+      proofArr.push(...siblingInstance);
+    }
+    
     const r1ShadowInstance = new U8ArrayUtil(new Uint8Array(round_1_output.shadow_instances!)).toNumber()[0];
+    proofArr.push(r1ShadowInstance);
   
     let instArr = new U8ArrayUtil(task.instances).toNumber();
   
-    // Find the index of this proof in the round 1 output by comparing task_ids
-    // This will be used to verify that this proof was included in a particular batch.
-    // If it does not exist, the verification will fail
     const index = round_1_output.task_ids.findIndex(
       (id:any) => id === task._id["$oid"]
     );
-  
-    let proofArr = siblingInstances;
-    proofArr.push(r1ShadowInstance);
   
     return {
       txData: txData,
@@ -208,86 +233,88 @@ export class Settlement {
   }
 
   private async trySettle() {
-    let merkleRoot = await this.getMerkle();
-    console.log("typeof :", typeof(merkleRoot[0]));
-    console.log(merkleRoot);
-    const proxy = new ethers.Contract(this.constants.proxyAddress, abiData.abi, this.signer);
+    return this.withRetry(async () => {
+      let merkleRoot = await this.getMerkle();
+      console.log("typeof :", typeof(merkleRoot[0]));
+      console.log(merkleRoot);
+      const proxy = new ethers.Contract(this.constants.proxyAddress, abiData.abi, this.signer);
 
-    try {
-      let record = await modelBundle.findOne({ merkleRoot: merkleRoot});
-      if (record) {
-        let taskId = record.taskId;
-        let task = await this.getTaskWithTimeout(taskId, 60000);
-        if (task!.proof_submit_mode == "Auto") {
-          const isRegistered =
-            task!.auto_submit_status === AutoSubmitStatus.RegisteredProof;
+      try {
+        let record = await modelBundle.findOne({ merkleRoot: merkleRoot});
+        if (record) {
+          let taskId = record.taskId;
+          let task = await this.getTaskWithTimeout(taskId, 60000);
+          if (task!.proof_submit_mode == "Auto") {
+            const isRegistered =
+              task!.auto_submit_status === AutoSubmitStatus.RegisteredProof;
 
-          if (!isRegistered) {
-            console.log("waiting for proof to be registered ... ");
-            return -1;
-          }
-        }
-
-        console.log('============')
-        console.log('here are the task',task)
-        console.log('============')
-
-        let attributes = await this.prepareVerifyAttributes(task!);
-
-
-        console.log('============')
-        console.log('here are the attributes',attributes)
-        console.log('============')
-
-
-        const tx = await proxy.verify(
-          attributes.txData,
-          attributes.proofArr,
-          attributes.verifyInstanceArr,
-          attributes.auxArr,
-          [attributes.instArr],
-        );
-        const receipt = await tx.wait();
-        console.log("transaction:", tx.hash);
-        console.log("receipt:", receipt);
-
-        const r = decodeWithdraw(attributes.txData);
-        const s = await this.getWithdrawEventParameters(proxy, receipt);
-        const withdrawArray = [];
-        let status = 'Done';
-        if (r.length !== s.length) {
-          status = 'Fail';
-          console.error("Arrays have different lengths,",r,s);
-        } else {
-          for (let i = 0; i < r.length; i++) {
-            const rItem = r[i];
-            const sItem = s[i];
-
-            if (rItem.address !== sItem.address || rItem.amount !== sItem.amount) {
-              console.log("Crash(Need manual review):");
-              console.error(`Mismatch found: ${rItem.address}:${rItem.amount} ${sItem.address}:${sItem.amount}`);
-              while(1);
-              status = 'Fail';
-              break;
-            } else {
-              record.withdrawArray.push({
-                address: rItem.address,
-                amount: rItem.amount,
-              });
+            if (!isRegistered) {
+              console.log("waiting for proof to be registered ... ");
+              return -1;
             }
           }
+
+          // console.log('============')
+          // console.log('here are the task',task)
+          // console.log('============')
+
+          let attributes = await this.prepareVerifyAttributes(task!);
+
+
+          console.log('============')
+          console.log('here are the attributes',attributes)
+          console.log('============')
+
+
+          const tx = await proxy.verify(
+            attributes.txData,
+            attributes.proofArr,
+            attributes.verifyInstanceArr,
+            attributes.auxArr,
+            [attributes.instArr],
+          );
+          const receipt = await tx.wait();
+          console.log("transaction:", tx.hash);
+          console.log("receipt:", receipt);
+
+          const r = decodeWithdraw(attributes.txData);
+          const s = await this.getWithdrawEventParameters(proxy, receipt);
+          const withdrawArray = [];
+          let status = 'Done';
+          if (r.length !== s.length) {
+            status = 'Fail';
+            console.error("Arrays have different lengths,",r,s);
+          } else {
+            for (let i = 0; i < r.length; i++) {
+              const rItem = r[i];
+              const sItem = s[i];
+
+              if (rItem.address !== sItem.address || rItem.amount !== sItem.amount) {
+                console.log("Crash(Need manual review):");
+                console.error(`Mismatch found: ${rItem.address}:${rItem.amount} ${sItem.address}:${sItem.amount}`);
+                while(1);
+                status = 'Fail';
+                break;
+              } else {
+                record.withdrawArray.push({
+                  address: rItem.address,
+                  amount: rItem.amount,
+                });
+              }
+            }
+          }
+          record.settleTxHash = tx.hash;
+          record.settleStatus = status;
+          await record.save();
+          console.log("Receipt verified");
+        } else {
+          console.log(`proof bundle ${merkleRoot} not found`);
         }
-        record.settleTxHash = tx.hash;
-        record.settleStatus = status;
-        await record.save();
-        console.log("Receipt verified");
-      } else {
-        console.log(`proof bundle ${merkleRoot} not found`);
+      } catch(e) {
+        console.log("Exception happen in trySettle()");
+        console.log(e);
       }
-    } catch(e) {
-      console.log("Exception happen in trySettle()");
-      console.log(e);
-    }
+    });
   }
 
   async serve() {
