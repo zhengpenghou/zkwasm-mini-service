@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { modelBundle } from "./utils/config.js";
+import { modelBundle } from "./config.js";
 
 const mongoUri = "mongodb://localhost"; // 替换成你的 MongoDB URI
 const taskId = "67a1e3f0e2dc2c324760d1de"; // 替换成你要查询的 taskId
