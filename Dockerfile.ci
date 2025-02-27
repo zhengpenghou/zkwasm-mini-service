@@ -1,0 +1,166 @@
+# Build stage
+FROM node:18-slim as builder
+
+WORKDIR /app
+
+# 添加构建参数
+ARG DEPLOY
+ARG USER_ADDRESS
+ARG SETTLEMENT_CONTRACT_ADDRESS
+ARG RPC_PROVIDER
+ARG PORT
+ARG AUTO_SUBMIT
+ARG ZKWASM_RPC_URL
+ARG SETTLER_PRIVATE_KEY
+ARG CHAIN_ID
+ARG SERVER_ADMIN_KEY
+
+# 在构建阶段打印参数（构建日志中可见）
+RUN echo "Build arguments in builder stage:" && \
+    echo "DEPLOY=${DEPLOY}" && \
+    echo "USER_ADDRESS=${USER_ADDRESS}" && \
+    echo "SETTLEMENT_CONTRACT_ADDRESS=${SETTLEMENT_CONTRACT_ADDRESS}" && \
+    echo "RPC_PROVIDER=${RPC_PROVIDER}" && \
+    echo "PORT=${PORT}" && \
+    echo "AUTO_SUBMIT=${AUTO_SUBMIT}" && \
+    echo "ZKWASM_RPC_URL=${ZKWASM_RPC_URL}" && \
+    echo "CHAIN_ID=${CHAIN_ID}"
+
+# 安装构建依赖
+RUN apt-get update && apt-get install -y \
+    git \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制 package.json 和 package-lock.json
+COPY package*.json ./
+
+# 安装依赖
+RUN npm ci --quiet
+
+# 复制源代码
+COPY . .
+
+# 构建应用
+RUN npm run build
+
+# 创建 .env 文件
+RUN echo "RPC_PROVIDER=${RPC_PROVIDER}" > .env && \
+    echo "SETTLEMENT_CONTRACT_ADDRESS=${SETTLEMENT_CONTRACT_ADDRESS}" >> .env && \
+    echo "USER_ADDRESS=${USER_ADDRESS}" >> .env && \
+    echo "PORT=${PORT:-3000}" >> .env && \
+    echo "AUTO_SUBMIT=${AUTO_SUBMIT:-false}" >> .env && \
+    echo "ZKWASM_RPC_URL=${ZKWASM_RPC_URL}" >> .env && \
+    echo "CHAIN_ID=${CHAIN_ID}" >> .env && \
+
+# Production stage
+FROM node:18-slim
+
+# 重新声明 ARG，这在多阶段构建中是必需的
+ARG DEPLOY
+ARG USER_ADDRESS
+ARG SETTLEMENT_CONTRACT_ADDRESS
+ARG RPC_PROVIDER
+ARG PORT
+ARG AUTO_SUBMIT
+ARG ZKWASM_RPC_URL
+ARG CHAIN_ID
+
+WORKDIR /app
+
+# 从构建阶段复制必要文件
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/.env ./.env
+
+# 设置环境变量
+ENV DEPLOY="${DEPLOY}" \
+    USER_ADDRESS="${USER_ADDRESS}" \
+    SETTLEMENT_CONTRACT_ADDRESS="${SETTLEMENT_CONTRACT_ADDRESS}" \
+    RPC_PROVIDER="${RPC_PROVIDER}" \
+    PORT="${PORT:-3000}" \
+    AUTO_SUBMIT="${AUTO_SUBMIT:-false}" \
+    ZKWASM_RPC_URL="${ZKWASM_RPC_URL}" \
+    CHAIN_ID="${CHAIN_ID}"
+
+# 添加调试信息
+RUN echo "Verifying environment variables:" && \
+    echo "DEPLOY=${DEPLOY}" && \
+    echo "USER_ADDRESS=${USER_ADDRESS}" && \
+    echo "SETTLEMENT_CONTRACT_ADDRESS=${SETTLEMENT_CONTRACT_ADDRESS}" && \
+    echo "PORT=${PORT}" && \
+    echo "AUTO_SUBMIT=${AUTO_SUBMIT}" && \
+    echo "ZKWASM_RPC_URL=${ZKWASM_RPC_URL}" && \
+    echo "CHAIN_ID=${CHAIN_ID}"
+
+# 创建启动脚本，用于在容器启动时检查服务
+RUN echo '#!/bin/sh\n\
+# 如果 ZKWASM_RPC_URL 为空，尝试使用 DNS 查找服务\n\
+if [ -z "$ZKWASM_RPC_URL" ]; then\n\
+  echo "ZKWASM_RPC_URL not set, attempting to discover service..."\n\
+  # 尝试几个可能的服务名\n\
+  for service in holdit-devops holdit rpc-service; do\n\
+    if nslookup $service 2>/dev/null; then\n\
+      export ZKWASM_RPC_URL="http://$service:3000"\n\
+      echo "Discovered service: $ZKWASM_RPC_URL"\n\
+      break\n\
+    fi\n\
+  done\n\
+  \n\
+  # 如果仍然为空，使用默认值\n\
+  if [ -z "$ZKWASM_RPC_URL" ]; then\n\
+    export ZKWASM_RPC_URL="http://holdit-devops:3000"\n\
+    echo "No service discovered, using default: $ZKWASM_RPC_URL"\n\
+  fi\n\
+fi\n\
+\n\
+# 如果 MONGO_URI 为空或包含 localhost，尝试使用 DNS 查找服务\n\
+if [ -z "$MONGO_URI" ] || echo "$MONGO_URI" | grep -q "localhost"; then\n\
+  echo "MONGO_URI not set or using localhost, attempting to discover service..."\n\
+  # 尝试几个可能的服务名\n\
+  for service in mongodb mongodb-service mongo; do\n\
+    if nslookup $service 2>/dev/null; then\n\
+      export MONGO_URI="mongodb://$service:27017"\n\
+      echo "Discovered MongoDB service: $MONGO_URI"\n\
+      break\n\
+    fi\n\
+  done\n\
+  \n\
+  # 如果仍然为空或使用 localhost，使用默认值\n\
+  if [ -z "$MONGO_URI" ] || echo "$MONGO_URI" | grep -q "localhost"; then\n\
+    export MONGO_URI="mongodb://mongodb-service:27017"\n\
+    echo "No MongoDB service discovered, using default: $MONGO_URI"\n\
+  fi\n\
+fi\n\
+\n\
+# 根据环境变量决定启动哪个服务\n\
+if [ "$DEPLOY" = "deposit" ]; then\n\
+  echo "Starting deposit service..."\n\
+  exec node ./dist/deposit_service.js\n\
+elif [ "$DEPLOY" = "settlement" ]; then\n\
+  echo "Starting settlement service..."\n\
+  exec node ./dist/settle_service.js\n\
+else\n\
+  echo "No valid DEPLOY value specified. Valid values are: deposit, settlement"\n\
+  echo "Exiting..."\n\
+  exit 1\n\
+fi\n' > /app/start.sh && \
+chmod +x /app/start.sh
+
+# 安装 dnsutils 用于 nslookup 命令
+RUN apt-get update && apt-get install -y dnsutils && rm -rf /var/lib/apt/lists/*
+
+# 创建非 root 用户
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+# 更改文件所有权
+RUN chown -R appuser:appuser /app
+
+# 切换到非 root 用户
+USER appuser
+
+EXPOSE ${PORT:-3000}
+CMD ["/app/start.sh"]

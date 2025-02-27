@@ -40,6 +40,7 @@ import {
   get_mongodb_uri,
   get_contract_addr,
   get_settle_private_account,
+  get_zkwasm_rpc_url,
 } from './utils/config.js';
 
 dotenv.config();
@@ -51,7 +52,7 @@ const getConfig = (configOverride?: Partial<Config>): Config => {
     serverAdminKey: get_server_admin_key(),
     settlementContractAddress: get_contract_addr(),
     mongoUri: get_mongodb_uri(),
-    zkwasmRpcUrl: "http://localhost:3000",
+    zkwasmRpcUrl: get_zkwasm_rpc_url(),
     settlerPrivateKey: get_settle_private_account(),
     chainId: Number(get_chain_id()),
     withdrawOpcode: "6",

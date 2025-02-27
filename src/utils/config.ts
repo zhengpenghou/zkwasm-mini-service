@@ -16,6 +16,14 @@ export const get_server_admin_key = () => {
   }
 }
 
+export const get_zkwasm_rpc_url = () => {
+  if (process.env.ZKWASM_RPC_URL) {
+    return process.env.ZKWASM_RPC_URL;
+  } else {
+    return "http://localhost:3000";
+  }
+}
+
 export const get_chain_id = () => {
   if (process.env.CHAIN_ID) {
     return process.env.CHAIN_ID;
@@ -31,8 +39,8 @@ export const get_server_admin_pubkey = () => {
 }
 
 export const get_mongodb_uri = () => {
-  if (process.env.URI) {
-    return process.env.URI;
+  if (process.env.MONGO_URI) {
+    return process.env.MONGO_URI;
   } else {
     return "mongodb://localhost";
   }

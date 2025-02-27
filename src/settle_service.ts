@@ -35,6 +35,7 @@ export interface Config {
     get_mongoose_db,
     get_contract_addr,
     get_settle_private_account,
+    get_zkwasm_rpc_url,
   } from './utils/config.js';
   
   dotenv.config();
@@ -46,7 +47,7 @@ export interface Config {
       serverAdminKey: get_server_admin_key(),
       settlementContractAddress: get_contract_addr(),
       mongoUri: get_mongoose_db(),
-      zkwasmRpcUrl: "http://localhost:3000",
+      zkwasmRpcUrl: get_zkwasm_rpc_url(),
       settlerPrivateKey: get_settle_private_account(),
       chainId: Number(get_chain_id()),
     };  
