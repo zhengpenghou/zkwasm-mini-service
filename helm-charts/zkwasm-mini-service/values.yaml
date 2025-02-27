@@ -1,0 +1,67 @@
+# Default values for zkwasm-mini-service
+
+image:
+  repository: ghcr.io/delphinuslab/zkwasm-mini-service
+  pullPolicy: IfNotPresent
+  tag: "latest"  # 可以是 latest 或特定版本
+
+# 外部服务配置
+externalServices:
+  mongodb:
+    host: "mongodb-service"  # 外部 MongoDB 服务名称
+    port: 27017
+    # 是否启用自动发现
+    autoDiscover: true
+    # 如果无法自动发现，使用这个服务名
+    fallbackServiceName: "mongodb-service"
+  redis:
+    host: "redis-service"    # 外部 Redis 服务名称
+    port: 6379
+  merkle:
+    host: "merkle-service"   # 外部 Merkle 服务名称
+    port: 3030
+  zkwasmRpc:
+    # 用于查找 RPC 服务的配置
+    port: 3000
+    # 如果无法自动发现，使用这个服务名
+    fallbackServiceName: "rpc-service"
+    # 是否启用自动发现
+    autoDiscover: true
+
+# 服务配置
+service:
+  type: ClusterIP
+  port: 3000
+
+# 部署配置
+depositService:
+  enabled: true
+  replicaCount: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+settlementService:
+  enabled: true
+  replicaCount: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# 通用配置
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# 密钥配置
+secrets:
+  create: false
+  name: "app-secrets"
