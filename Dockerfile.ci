@@ -4,26 +4,14 @@ FROM node:18-slim as builder
 WORKDIR /app
 
 # 添加构建参数
-ARG DEPLOY
-ARG USER_ADDRESS
 ARG SETTLEMENT_CONTRACT_ADDRESS
 ARG RPC_PROVIDER
-ARG PORT
-ARG AUTO_SUBMIT
-ARG ZKWASM_RPC_URL
-ARG SETTLER_PRIVATE_KEY
 ARG CHAIN_ID
-ARG SERVER_ADMIN_KEY
 
 # 在构建阶段打印参数（构建日志中可见）
 RUN echo "Build arguments in builder stage:" && \
-    echo "DEPLOY=${DEPLOY}" && \
-    echo "USER_ADDRESS=${USER_ADDRESS}" && \
     echo "SETTLEMENT_CONTRACT_ADDRESS=${SETTLEMENT_CONTRACT_ADDRESS}" && \
     echo "RPC_PROVIDER=${RPC_PROVIDER}" && \
-    echo "PORT=${PORT}" && \
-    echo "AUTO_SUBMIT=${AUTO_SUBMIT}" && \
-    echo "ZKWASM_RPC_URL=${ZKWASM_RPC_URL}" && \
     echo "CHAIN_ID=${CHAIN_ID}"
 
 # 安装构建依赖
@@ -46,26 +34,12 @@ COPY . .
 # 构建应用
 RUN npm run build
 
-# 创建 .env 文件
-RUN echo "RPC_PROVIDER=${RPC_PROVIDER}" > .env && \
-    echo "SETTLEMENT_CONTRACT_ADDRESS=${SETTLEMENT_CONTRACT_ADDRESS}" >> .env && \
-    echo "USER_ADDRESS=${USER_ADDRESS}" >> .env && \
-    echo "PORT=${PORT:-3000}" >> .env && \
-    echo "AUTO_SUBMIT=${AUTO_SUBMIT:-false}" >> .env && \
-    echo "ZKWASM_RPC_URL=${ZKWASM_RPC_URL}" >> .env && \
-    echo "CHAIN_ID=${CHAIN_ID}" >> .env && \
-
 # Production stage
 FROM node:18-slim
 
 # 重新声明 ARG，这在多阶段构建中是必需的
-ARG DEPLOY
-ARG USER_ADDRESS
 ARG SETTLEMENT_CONTRACT_ADDRESS
 ARG RPC_PROVIDER
-ARG PORT
-ARG AUTO_SUBMIT
-ARG ZKWASM_RPC_URL
 ARG CHAIN_ID
 
 WORKDIR /app
@@ -74,27 +48,24 @@ WORKDIR /app
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/.env ./.env
+
+# 创建 .env 文件（在生产阶段而不是构建阶段）
+RUN echo "SETTLEMENT_CONTRACT_ADDRESS=${SETTLEMENT_CONTRACT_ADDRESS}" > .env && \
+    echo "RPC_PROVIDER=${RPC_PROVIDER}" >> .env && \
+    echo "CHAIN_ID=${CHAIN_ID}" >> .env
 
 # 设置环境变量
-ENV DEPLOY="${DEPLOY}" \
-    USER_ADDRESS="${USER_ADDRESS}" \
-    SETTLEMENT_CONTRACT_ADDRESS="${SETTLEMENT_CONTRACT_ADDRESS}" \
+ENV SETTLEMENT_CONTRACT_ADDRESS="${SETTLEMENT_CONTRACT_ADDRESS}" \
     RPC_PROVIDER="${RPC_PROVIDER}" \
-    PORT="${PORT:-3000}" \
-    AUTO_SUBMIT="${AUTO_SUBMIT:-false}" \
-    ZKWASM_RPC_URL="${ZKWASM_RPC_URL}" \
-    CHAIN_ID="${CHAIN_ID}"
+    CHAIN_ID="${CHAIN_ID}" \
+    MONGO_URI="mongodb://localhost:27017"
 
 # 添加调试信息
 RUN echo "Verifying environment variables:" && \
-    echo "DEPLOY=${DEPLOY}" && \
-    echo "USER_ADDRESS=${USER_ADDRESS}" && \
     echo "SETTLEMENT_CONTRACT_ADDRESS=${SETTLEMENT_CONTRACT_ADDRESS}" && \
-    echo "PORT=${PORT}" && \
-    echo "AUTO_SUBMIT=${AUTO_SUBMIT}" && \
-    echo "ZKWASM_RPC_URL=${ZKWASM_RPC_URL}" && \
-    echo "CHAIN_ID=${CHAIN_ID}"
+    echo "RPC_PROVIDER=${RPC_PROVIDER}" && \
+    echo "CHAIN_ID=${CHAIN_ID}" && \
+    echo "MONGO_URI=${MONGO_URI}"
 
 # 创建启动脚本，用于在容器启动时检查服务
 RUN echo '#!/bin/sh\n\
@@ -147,7 +118,7 @@ else\n\
   echo "No valid DEPLOY value specified. Valid values are: deposit, settlement"\n\
   echo "Exiting..."\n\
   exit 1\n\
-fi\n' > /app/start.sh && \
+fi' > /app/start.sh && \
 chmod +x /app/start.sh
 
 # 安装 dnsutils 用于 nslookup 命令
@@ -162,5 +133,5 @@ RUN chown -R appuser:appuser /app
 # 切换到非 root 用户
 USER appuser
 
-EXPOSE ${PORT:-3000}
+EXPOSE 3000
 CMD ["/app/start.sh"]
