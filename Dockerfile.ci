@@ -1,5 +1,5 @@
 # Build stage
-FROM node:18-slim as builder
+FROM node:18-slim AS builder
 
 WORKDIR /app
 
@@ -25,14 +25,35 @@ RUN apt-get update && apt-get install -y \
 # 复制 package.json 和 package-lock.json
 COPY package*.json ./
 
+# 修改 package.json 移除 postinstall 脚本
+RUN if grep -q "postinstall" package.json; then \
+      sed -i 's/"postinstall": "npm run build",//g' package.json; \
+    fi
+
 # 安装依赖
 RUN npm ci --quiet
 
 # 复制源代码
 COPY . .
 
+# 创建 tsconfig.json 如果不存在
+RUN if [ ! -f tsconfig.json ]; then \
+      echo '{ \
+        "compilerOptions": { \
+          "target": "es2020", \
+          "module": "commonjs", \
+          "esModuleInterop": true, \
+          "outDir": "./dist", \
+          "strict": true, \
+          "skipLibCheck": true, \
+          "forceConsistentCasingInFileNames": true \
+        }, \
+        "include": ["src/**/*"] \
+      }' > tsconfig.json; \
+    fi
+
 # 构建应用
-RUN npm run build
+RUN npm run build || npx tsc
 
 # Production stage
 FROM node:18-slim
@@ -69,6 +90,27 @@ RUN echo "Verifying environment variables:" && \
 
 # 创建启动脚本，用于在容器启动时检查服务
 RUN echo '#!/bin/sh\n\
+# 如果 IMAGE 为空，尝试使用 DNS 查找服务\n\
+if [ -z "$IMAGE" ]; then\n\
+  echo "IMAGE not set, attempting to discover from main service..."\n\
+  # 尝试几个可能的主服务名\n\
+  for service in main-service holdit-service zkwasm-service; do\n\
+    if nslookup $service 2>/dev/null; then\n\
+      # 尝试从服务的 .env 文件获取 IMAGE\n\
+      if curl -s http://$service:3000/api/config 2>/dev/null | grep -q "IMAGE"; then\n\
+        export IMAGE=$(curl -s http://$service:3000/api/config | grep IMAGE | cut -d":" -f2 | tr -d " ,")\n\
+        echo "Discovered IMAGE from $service: $IMAGE"\n\
+        break\n\
+      fi\n\
+    fi\n\
+  done\n\
+  \n\
+  # 如果仍然为空，使用默认值或警告\n\
+  if [ -z "$IMAGE" ]; then\n\
+    echo "WARNING: Could not discover IMAGE from main service. Some features may not work correctly."\n\
+  fi\n\
+fi\n\
+\n\
 # 如果 ZKWASM_RPC_URL 为空，尝试使用 DNS 查找服务\n\
 if [ -z "$ZKWASM_RPC_URL" ]; then\n\
   echo "ZKWASM_RPC_URL not set, attempting to discover service..."\n\
@@ -121,8 +163,8 @@ else\n\
 fi' > /app/start.sh && \
 chmod +x /app/start.sh
 
-# 安装 dnsutils 用于 nslookup 命令
-RUN apt-get update && apt-get install -y dnsutils && rm -rf /var/lib/apt/lists/*
+# 安装 dnsutils 和 curl 用于服务发现
+RUN apt-get update && apt-get install -y dnsutils curl && rm -rf /var/lib/apt/lists/*
 
 # 创建非 root 用户
 RUN groupadd -r appuser && useradd -r -g appuser appuser
