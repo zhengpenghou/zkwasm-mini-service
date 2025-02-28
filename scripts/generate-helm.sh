@@ -4,6 +4,35 @@
 CHART_NAME="zkwasm-mini-service"
 CHART_PATH="./helm-charts/${CHART_NAME}"
 
+# 获取远程仓库信息
+REPO_URL=$(git config --get remote.origin.url)
+if [[ $REPO_URL == *"github.com"* ]]; then
+  # 从 GitHub URL 提取用户名/组织名
+  if [[ $REPO_URL == *":"* ]]; then
+    # SSH 格式: git@github.com:username/repo.git
+    REPO_OWNER=$(echo $REPO_URL | sed -E 's/.*:([^\/]+)\/[^\/]+.*/\1/')
+  else
+    # HTTPS 格式: https://github.com/username/repo.git
+    REPO_OWNER=$(echo $REPO_URL | sed -E 's/.*github\.com\/([^\/]+).*/\1/')
+  fi
+  
+  # 确保只提取用户名部分，移除任何 URL 前缀
+  REPO_OWNER=$(echo $REPO_OWNER | sed 's/https:\/\///g' | sed 's/http:\/\///g')
+  
+  # 确保只提取用户名部分，移除 github.com 和后面的路径
+  REPO_OWNER=$(echo $REPO_OWNER | sed 's/github\.com\///g' | sed 's/\/.*//g')
+  
+  # 转换为小写
+  REPO_OWNER=$(echo $REPO_OWNER | tr '[:upper:]' '[:lower:]')
+else
+  # 如果不是 GitHub 仓库，使用默认值
+  REPO_OWNER="jupiterxiaoxiaoyu"
+  echo "Warning: Not a GitHub repository or couldn't determine owner. Using default: $REPO_OWNER"
+fi
+
+# 打印提取的用户名，用于调试
+echo "Using repository owner: $REPO_OWNER"
+
 # 创建必要的目录
 mkdir -p ${CHART_PATH}/templates
 
@@ -24,7 +53,7 @@ cat > ${CHART_PATH}/values.yaml << EOL
 # Default values for ${CHART_NAME}
 
 image:
-  repository: ghcr.io/delphinuslab/zkwasm-mini-service
+  repository: ghcr.io/${REPO_OWNER}/${CHART_NAME}
   pullPolicy: IfNotPresent
   tag: "latest"  # 可以是 latest 或特定版本
 
