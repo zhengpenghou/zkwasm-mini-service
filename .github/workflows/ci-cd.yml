@@ -5,17 +5,9 @@ on:
     branches: [ main ]
     tags: [ 'v*' ]
 
-
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  DEPLOY: ${{ secrets.DEPLOY }}
-  USER_ADDRESS: ${{ secrets.USER_ADDRESS }}
-  SETTLEMENT_CONTRACT_ADDRESS: ${{ secrets.SETTLEMENT_CONTRACT_ADDRESS }}
-  RPC_PROVIDER: ${{ secrets.RPC_PROVIDER }}
-  PORT: ${{ secrets.PORT }}
-  AUTO_SUBMIT: ${{ secrets.AUTO_SUBMIT }}
-  ZKWASM_RPC_URL: ${{ secrets.ZKWASM_RPC_URL }}
 
 jobs:
   build-and-push:
@@ -59,28 +51,12 @@ jobs:
 
       - name: Build and push image
         uses: docker/build-push-action@v5
-        env:
-          DEPLOY: ${{ secrets.DEPLOY }}
-          USER_ADDRESS: ${{ secrets.USER_ADDRESS }}
-          SETTLEMENT_CONTRACT_ADDRESS: ${{ secrets.SETTLEMENT_CONTRACT_ADDRESS }}
-          RPC_PROVIDER: ${{ secrets.RPC_PROVIDER }}
-          PORT: ${{ secrets.PORT }}
-          AUTO_SUBMIT: ${{ secrets.AUTO_SUBMIT }}
-          ZKWASM_RPC_URL: ${{ secrets.ZKWASM_RPC_URL }}
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
           file: Dockerfile.ci
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            DEPLOY=${{ secrets.DEPLOY }}
-            USER_ADDRESS=${{ secrets.USER_ADDRESS }}
-            SETTLEMENT_CONTRACT_ADDRESS=${{ secrets.SETTLEMENT_CONTRACT_ADDRESS }}
-            RPC_PROVIDER=${{ secrets.RPC_PROVIDER }}
-            PORT=${{ secrets.PORT }}
-            AUTO_SUBMIT=${{ secrets.AUTO_SUBMIT }}
-            ZKWASM_RPC_URL=${{ secrets.ZKWASM_RPC_URL }}
           no-cache: true
 
       - name: Notify build result

@@ -199,26 +199,11 @@ spec:
               value: "mongodb://{{ include "zkwasm-mini-service.findMongoDBService" . }}:{{ .Values.externalServices.mongodb.port }}"
             - name: ZKWASM_RPC_URL
               value: "http://{{ include "zkwasm-mini-service.findRpcService" . }}:{{ .Values.externalServices.zkwasmRpc.port }}"
-            - name: RPC_PROVIDER
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.secrets.name }}
-                  key: RPC_PROVIDER
             - name: SERVER_ADMIN_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.secrets.name }}
                   key: SERVER_ADMIN_KEY
-            - name: SETTLEMENT_CONTRACT_ADDRESS
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.secrets.name }}
-                  key: SETTLEMENT_CONTRACT_ADDRESS
-            - name: CHAIN_ID
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.secrets.name }}
-                  key: CHAIN_ID
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
@@ -275,26 +260,11 @@ spec:
               value: "mongodb://{{ include "zkwasm-mini-service.findMongoDBService" . }}:{{ .Values.externalServices.mongodb.port }}"
             - name: ZKWASM_RPC_URL
               value: "http://{{ include "zkwasm-mini-service.findRpcService" . }}:{{ .Values.externalServices.zkwasmRpc.port }}"
-            - name: RPC_PROVIDER
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.secrets.name }}
-                  key: RPC_PROVIDER
             - name: SERVER_ADMIN_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.secrets.name }}
                   key: SERVER_ADMIN_KEY
-            - name: SETTLEMENT_CONTRACT_ADDRESS
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.secrets.name }}
-                  key: SETTLEMENT_CONTRACT_ADDRESS
-            - name: CHAIN_ID
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.secrets.name }}
-                  key: CHAIN_ID
             - name: SETTLER_PRIVATE_KEY
               valueFrom:
                 secretKeyRef:
@@ -378,10 +348,7 @@ metadata:
     {{- include "${CHART_NAME}.labels" . | nindent 4 }}
 type: Opaque
 data:
-  RPC_PROVIDER: {{ .Values.secrets.rpcProvider | b64enc | quote }}
   SERVER_ADMIN_KEY: {{ .Values.secrets.serverAdminKey | b64enc | quote }}
-  SETTLEMENT_CONTRACT_ADDRESS: {{ .Values.secrets.settlementContractAddress | b64enc | quote }}
-  CHAIN_ID: {{ .Values.secrets.chainId | b64enc | quote }}
   SETTLER_PRIVATE_KEY: {{ .Values.secrets.settlerPrivateKey | b64enc | quote }}
 {{- end }}
 EOL

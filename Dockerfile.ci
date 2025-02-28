@@ -3,17 +3,6 @@ FROM node:18-slim AS builder
 
 WORKDIR /app
 
-# 添加构建参数
-ARG SETTLEMENT_CONTRACT_ADDRESS
-ARG RPC_PROVIDER
-ARG CHAIN_ID
-
-# 在构建阶段打印参数（构建日志中可见）
-RUN echo "Build arguments in builder stage:" && \
-    echo "SETTLEMENT_CONTRACT_ADDRESS=${SETTLEMENT_CONTRACT_ADDRESS}" && \
-    echo "RPC_PROVIDER=${RPC_PROVIDER}" && \
-    echo "CHAIN_ID=${CHAIN_ID}"
-
 # 安装构建依赖
 RUN apt-get update && apt-get install -y \
     git \
@@ -33,7 +22,7 @@ RUN if grep -q "postinstall" package.json; then \
 # 安装依赖
 RUN npm ci --quiet
 
-# 复制源代码
+# 复制源代码和 .env 文件
 COPY . .
 
 # 创建 tsconfig.json 如果不存在
@@ -58,59 +47,16 @@ RUN npm run build || npx tsc
 # Production stage
 FROM node:18-slim
 
-# 重新声明 ARG，这在多阶段构建中是必需的
-ARG SETTLEMENT_CONTRACT_ADDRESS
-ARG RPC_PROVIDER
-ARG CHAIN_ID
-
 WORKDIR /app
 
 # 从构建阶段复制必要文件
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
-
-# 创建 .env 文件（在生产阶段而不是构建阶段）
-RUN echo "SETTLEMENT_CONTRACT_ADDRESS=${SETTLEMENT_CONTRACT_ADDRESS}" > .env && \
-    echo "RPC_PROVIDER=${RPC_PROVIDER}" >> .env && \
-    echo "CHAIN_ID=${CHAIN_ID}" >> .env
-
-# 设置环境变量
-ENV SETTLEMENT_CONTRACT_ADDRESS="${SETTLEMENT_CONTRACT_ADDRESS}" \
-    RPC_PROVIDER="${RPC_PROVIDER}" \
-    CHAIN_ID="${CHAIN_ID}" \
-    MONGO_URI="mongodb://localhost:27017"
-
-# 添加调试信息
-RUN echo "Verifying environment variables:" && \
-    echo "SETTLEMENT_CONTRACT_ADDRESS=${SETTLEMENT_CONTRACT_ADDRESS}" && \
-    echo "RPC_PROVIDER=${RPC_PROVIDER}" && \
-    echo "CHAIN_ID=${CHAIN_ID}" && \
-    echo "MONGO_URI=${MONGO_URI}"
+COPY --from=builder /app/.env ./.env
 
 # 创建启动脚本，用于在容器启动时检查服务
 RUN echo '#!/bin/sh\n\
-# 如果 IMAGE 为空，尝试使用 DNS 查找服务\n\
-if [ -z "$IMAGE" ]; then\n\
-  echo "IMAGE not set, attempting to discover from main service..."\n\
-  # 尝试几个可能的主服务名\n\
-  for service in main-service holdit-service zkwasm-service; do\n\
-    if nslookup $service 2>/dev/null; then\n\
-      # 尝试从服务的 .env 文件获取 IMAGE\n\
-      if curl -s http://$service:3000/api/config 2>/dev/null | grep -q "IMAGE"; then\n\
-        export IMAGE=$(curl -s http://$service:3000/api/config | grep IMAGE | cut -d":" -f2 | tr -d " ,")\n\
-        echo "Discovered IMAGE from $service: $IMAGE"\n\
-        break\n\
-      fi\n\
-    fi\n\
-  done\n\
-  \n\
-  # 如果仍然为空，使用默认值或警告\n\
-  if [ -z "$IMAGE" ]; then\n\
-    echo "WARNING: Could not discover IMAGE from main service. Some features may not work correctly."\n\
-  fi\n\
-fi\n\
-\n\
 # 如果 ZKWASM_RPC_URL 为空，尝试使用 DNS 查找服务\n\
 if [ -z "$ZKWASM_RPC_URL" ]; then\n\
   echo "ZKWASM_RPC_URL not set, attempting to discover service..."\n\
@@ -149,6 +95,12 @@ if [ -z "$MONGO_URI" ] || echo "$MONGO_URI" | grep -q "localhost"; then\n\
   fi\n\
 fi\n\
 \n\
+# 加载 .env 文件中的环境变量\n\
+if [ -f .env ]; then\n\
+  echo "Loading environment variables from .env file"\n\
+  export $(cat .env | grep -v "^#" | xargs)\n\
+fi\n\
+\n\
 # 根据环境变量决定启动哪个服务\n\
 if [ "$DEPLOY" = "deposit" ]; then\n\
   echo "Starting deposit service..."\n\
@@ -163,8 +115,8 @@ else\n\
 fi' > /app/start.sh && \
 chmod +x /app/start.sh
 
-# 安装 dnsutils 和 curl 用于服务发现
-RUN apt-get update && apt-get install -y dnsutils curl && rm -rf /var/lib/apt/lists/*
+# 安装 dnsutils 用于 nslookup 命令
+RUN apt-get update && apt-get install -y dnsutils && rm -rf /var/lib/apt/lists/*
 
 # 创建非 root 用户
 RUN groupadd -r appuser && useradd -r -g appuser appuser
