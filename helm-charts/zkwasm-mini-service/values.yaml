@@ -1,7 +1,7 @@
 # Default values for zkwasm-mini-service
 
 image:
-  repository: ghcr.io/delphinuslab/zkwasm-mini-service
+  repository: ghcr.io/JupiterXiaoxiaoYu/zkwasm-mini-service
   pullPolicy: IfNotPresent
   tag: "latest"  # 可以是 latest 或特定版本
 

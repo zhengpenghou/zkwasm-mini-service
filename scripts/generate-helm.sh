@@ -4,6 +4,18 @@
 CHART_NAME="zkwasm-mini-service"
 CHART_PATH="./helm-charts/${CHART_NAME}"
 
+# 从 Git 配置中获取用户名/组织名
+GIT_REMOTE=$(git config --get remote.origin.url)
+GIT_USER=$(echo $GIT_REMOTE | sed -n 's/.*github.com[:\/]\([^\/]*\)\/.*/\1/p')
+
+# 如果无法获取，使用默认值
+if [ -z "$GIT_USER" ]; then
+  GIT_USER="delphinuslab"
+  echo "无法从 Git 配置获取用户名/组织名，使用默认值: $GIT_USER"
+else
+  echo "从 Git 配置获取到用户名/组织名: $GIT_USER"
+fi
+
 # 创建必要的目录
 mkdir -p ${CHART_PATH}/templates
 
@@ -24,7 +36,7 @@ cat > ${CHART_PATH}/values.yaml << EOL
 # Default values for ${CHART_NAME}
 
 image:
-  repository: ghcr.io/delphinuslab/zkwasm-mini-service
+  repository: ghcr.io/${GIT_USER}/zkwasm-mini-service
   pullPolicy: IfNotPresent
   tag: "latest"  # 可以是 latest 或特定版本
 
