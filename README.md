@@ -173,6 +173,8 @@ npm test
 npm run lint
 ```
 
+## DevOps 
+
 ## Contributing
 
 1. Fork the repository
