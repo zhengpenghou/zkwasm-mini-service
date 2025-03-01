@@ -50,7 +50,7 @@ SERVER_ADMIN_KEY=your-admin-key
 SETTLEMENT_CONTRACT_ADDRESS=0x...
 MONGO_URI=mongodb://localhost:27017
 ZKWASM_RPC_URL=https://your-zkwasm-rpc
-SETTLER_PRIVATE_KEY=your-settler-private-key  # Required for Settlement service
+SETTLER_PRIVATE_ACCOUNT=your-settler-private-key  # Required for Settlement service
 CHAIN_ID=your-chain-id
 ```
 

@@ -294,11 +294,11 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secrets.name }}
                   key: SERVER_ADMIN_KEY
-            - name: SETTLER_PRIVATE_KEY
+            - name: SETTLER_PRIVATE_ACCOUNT
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.secrets.name }}
-                  key: SETTLER_PRIVATE_KEY
+                  key: SETTLER_PRIVATE_ACCOUNT
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
@@ -378,7 +378,7 @@ metadata:
 type: Opaque
 data:
   SERVER_ADMIN_KEY: {{ .Values.secrets.serverAdminKey | b64enc | quote }}
-  SETTLER_PRIVATE_KEY: {{ .Values.secrets.settlerPrivateKey | b64enc | quote }}
+  SETTLER_PRIVATE_ACCOUNT: {{ .Values.secrets.settlerPrivateKey | b64enc | quote }}
 {{- end }}
 EOL
 
