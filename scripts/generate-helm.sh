@@ -3,6 +3,10 @@
 # 设置变量
 CHART_NAME="zkwasm-mini-service"
 CHART_PATH="./helm-charts/${CHART_NAME}"
+IMAGE_ENV="CE37CF0DF6D52E3A6D4A0357123FBF39"
+SETTLEMENT_CONTRACT_ADDRESS="0x0703C0B64375D8CBEF5C502CCAF7909e4dBF33C8"
+RPC_PROVIDER="https://ethereum-sepolia-rpc.publicnode.com"
+CHAIN_ID=11155111
 
 # 获取远程仓库信息
 REPO_URL=$(git config --get remote.origin.url)
@@ -56,6 +60,13 @@ image:
   repository: ghcr.io/${REPO_OWNER}/${CHART_NAME}
   pullPolicy: IfNotPresent
   tag: "latest"  # 可以是 latest 或特定版本
+
+# 环境变量配置
+environment:
+  image: "${IMAGE_ENV}"
+  settlementContractAddress: "${SETTLEMENT_CONTRACT_ADDRESS}"
+  rpcProvider: "${RPC_PROVIDER}"
+  chainId: ${CHAIN_ID}
 
 # 外部服务配置
 externalServices:
@@ -233,6 +244,14 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secrets.name }}
                   key: SERVER_ADMIN_KEY
+            - name: IMAGE
+              value: "{{ .Values.environment.image }}"
+            - name: SETTLEMENT_CONTRACT_ADDRESS
+              value: "{{ .Values.environment.settlementContractAddress }}"
+            - name: RPC_PROVIDER
+              value: "{{ .Values.environment.rpcProvider }}"
+            - name: CHAIN_ID
+              value: "{{ .Values.environment.chainId }}"
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
@@ -299,6 +318,14 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secrets.name }}
                   key: SETTLER_PRIVATE_ACCOUNT
+            - name: IMAGE
+              value: "{{ .Values.environment.image }}"
+            - name: SETTLEMENT_CONTRACT_ADDRESS
+              value: "{{ .Values.environment.settlementContractAddress }}"
+            - name: RPC_PROVIDER
+              value: "{{ .Values.environment.rpcProvider }}"
+            - name: CHAIN_ID
+              value: "{{ .Values.environment.chainId }}"
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}

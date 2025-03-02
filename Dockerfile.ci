@@ -22,7 +22,7 @@ RUN if grep -q "postinstall" package.json; then \
 # 安装依赖
 RUN npm ci --quiet
 
-# 复制源代码和 .env 文件
+# 复制源代码
 COPY . .
 
 # 创建 tsconfig.json 如果不存在
@@ -53,7 +53,6 @@ WORKDIR /app
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/.env ./.env
 
 # 创建启动脚本，用于在容器启动时检查服务
 RUN echo '#!/bin/sh\n\
@@ -93,12 +92,6 @@ if [ -z "$MONGO_URI" ] || echo "$MONGO_URI" | grep -q "localhost"; then\n\
     export MONGO_URI="mongodb://mongodb-service:27017"\n\
     echo "No MongoDB service discovered, using default: $MONGO_URI"\n\
   fi\n\
-fi\n\
-\n\
-# 加载 .env 文件中的环境变量\n\
-if [ -f .env ]; then\n\
-  echo "Loading environment variables from .env file"\n\
-  export $(cat .env | grep -v "^#" | xargs)\n\
 fi\n\
 \n\
 # 根据环境变量决定启动哪个服务\n\

@@ -173,7 +173,42 @@ npm test
 npm run lint
 ```
 
-## DevOps 
+## DevOps
+
+### Helm Chart Deployment
+
+This project includes a script to generate a Helm chart for Kubernetes deployment:
+
+1. First, modify the environment variables in `scripts/generate-helm.sh`:
+   ```bash
+   # Set these variables according to your environment
+   IMAGE_ENV="CE37CF0DF6D52E3A6D4A0357123FBF39"
+   SETTLEMENT_CONTRACT_ADDRESS="0x0703C0B64375D8CBEF5C502CCAF7909e4dBF33C8"
+   RPC_PROVIDER="https://ethereum-sepolia-rpc.publicnode.com"
+   CHAIN_ID=11155111
+   ```
+
+2. Generate the Helm chart:
+   ```bash
+   make build
+   ```
+
+3. The Helm chart will be created in `./helm-charts/zkwasm-mini-service/`
+
+4. Push the code to the repository and this will trigger the CI/CD pipeline to build the image and push it to the container registry.
+
+5. After the CI/CD pipeline is finished, you can deploy the chart to your Kubernetes cluster if app-secrets is not provided:
+   ```bash
+   helm install zkwasm-mini-service ./helm-charts/zkwasm-mini-service \
+     --set secrets.create=true \
+     --set secrets.serverAdminKey=your-admin-key \
+     --set secrets.settlerPrivateKey=your-settler-private-key
+   ```
+
+   If app-secrets is provided, you can deploy the chart to your Kubernetes cluster:
+   ```bash
+   helm install zkwasm-mini-service ./helm-charts/zkwasm-mini-service
+   ```
 
 ## Contributing
 
