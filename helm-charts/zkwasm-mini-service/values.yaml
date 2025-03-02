@@ -5,6 +5,13 @@ image:
   pullPolicy: IfNotPresent
   tag: "latest"  # 可以是 latest 或特定版本
 
+# 环境变量配置
+environment:
+  image: "CE37CF0DF6D52E3A6D4A0357123FBF39"
+  settlementContractAddress: "0x0703C0B64375D8CBEF5C502CCAF7909e4dBF33C8"
+  rpcProvider: "https://ethereum-sepolia-rpc.publicnode.com"
+  chainId: 11155111
+
 # 外部服务配置
 externalServices:
   mongodb:

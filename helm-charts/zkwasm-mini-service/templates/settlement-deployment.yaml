@@ -41,6 +41,14 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secrets.name }}
                   key: SETTLER_PRIVATE_ACCOUNT
+            - name: IMAGE
+              value: "{{ .Values.environment.image }}"
+            - name: SETTLEMENT_CONTRACT_ADDRESS
+              value: "{{ .Values.environment.settlementContractAddress }}"
+            - name: RPC_PROVIDER
+              value: "{{ .Values.environment.rpcProvider }}"
+            - name: CHAIN_ID
+              value: "{{ .Values.environment.chainId }}"
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
