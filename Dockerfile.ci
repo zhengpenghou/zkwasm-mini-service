@@ -25,6 +25,7 @@ RUN npm ci --quiet
 # 复制源代码
 COPY . .
 
+RUN rm -f .env
 # 创建 tsconfig.json 如果不存在
 RUN if [ ! -f tsconfig.json ]; then \
       echo '{ \
