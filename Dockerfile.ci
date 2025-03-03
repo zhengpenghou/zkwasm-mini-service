@@ -108,6 +108,7 @@ else\n\
   exit 1\n\
 fi' > /app/start.sh && \
 chmod +x /app/start.sh
+RUN rm -f /app/.env
 
 # 安装 dnsutils 用于 nslookup 命令
 RUN apt-get update && apt-get install -y dnsutils && rm -rf /var/lib/apt/lists/*
