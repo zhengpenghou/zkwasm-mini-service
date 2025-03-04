@@ -70,5 +70,8 @@ affinity: {}
 
 # 密钥配置
 secrets:
-  create: false
+  create: true
   name: "app-secrets"
+  keys:
+    serverAdminKey: "your-admin-key-here"
+    settlerPrivateKey: "your-settler-pk-here"

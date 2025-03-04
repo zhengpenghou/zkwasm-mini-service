@@ -35,12 +35,12 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.secrets.name }}
-                  key: SERVER_ADMIN_KEY
+                  key: {{ .Values.secrets.keys.serverAdminKey }}
             - name: SETTLER_PRIVATE_ACCOUNT
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.secrets.name }}
-                  key: SETTLER_PRIVATE_ACCOUNT
+                  key: {{ .Values.secrets.keys.settlerPrivateKey }}
             - name: IMAGE
               value: "{{ .Values.environment.image }}"
             - name: SETTLEMENT_CONTRACT_ADDRESS

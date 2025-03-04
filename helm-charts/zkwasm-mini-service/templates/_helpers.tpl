@@ -60,3 +60,11 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{- define "zkwasm-mini-service.mongoUri" -}}
+mongodb://{{ include "zkwasm-mini-service.findMongoDBService" . }}:{{ .Values.externalServices.mongodb.port }}
+{{- end }}
+
+{{- define "zkwasm-mini-service.zkwasmRpcUrl" -}}
+http://{{ include "zkwasm-mini-service.findRpcService" . }}:{{ .Values.externalServices.zkwasmRpc.port }}
+{{- end }}
